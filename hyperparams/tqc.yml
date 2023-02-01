@@ -1,17 +1,16 @@
 ## Custom envs
-donkey-mountain-track-v0: &defaults
+MultiSim-v0: &defaults
   # Normalize AE (+ the rest)
-  normalize: "{'norm_obs': True, 'norm_reward': False}"
+  normalize: "{'norm_obs': False, 'norm_reward': False}"
   env_wrapper:
     - gym.wrappers.time_limit.TimeLimit:
         max_episode_steps: 10000
-    - ae.wrapper.AutoencoderWrapper
     - utils.wrappers.HistoryWrapper:
         horizon: 2
   callback:
     - utils.callbacks.ParallelTrainCallback:
         gradient_steps: 200
-    - utils.callbacks.LapTimeCallback
+
   n_timesteps: !!float 2e6
   policy: 'MlpPolicy'
   learning_rate: !!float 7.3e-4

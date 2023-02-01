@@ -48,6 +48,10 @@ try:
 except ImportError:
     panda_gym = None
 
+try:
+    import gym_crowd  # pytype: disable=import-error
+except ImportError:
+    panda_gym = None
 
 # Register no vel envs
 def create_no_vel_env(env_id: str):
