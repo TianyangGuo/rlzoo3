@@ -229,7 +229,7 @@ class DelayedRewardWrapper(gym.Wrapper):
 class HistoryWrapper(gym.Wrapper):
     """
     Stack past observations and actions to give an history to the agent.
-
+    handle time delay, time delay may break markov assumption, may hinder training
     :param env:
     :param horizon:Number of steps to keep in the history.
     """
