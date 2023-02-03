@@ -78,3 +78,31 @@ Acrobot-v1:
   exploration_fraction: 0.12
   exploration_final_eps: 0.1
   policy_kwargs: "dict(net_arch=[256, 256])"
+
+## Custom envs
+MultiSim-v0: &defaults
+  # Normalize AE (+ the rest)
+  normalize: "{'norm_obs': False, 'norm_reward': False}"
+  env_wrapper:
+    - gym.wrappers.time_limit.TimeLimit:
+        max_episode_steps: 10000
+    - utils.wrappers.HistoryWrapper:
+        horizon: 2
+  callback:
+    - utils.callbacks.ParallelTrainCallback:
+        gradient_steps: 200
+
+  n_timesteps: !!float 2e6
+  policy: 'MlpPolicy'
+  learning_rate: !!float 7.3e-4
+  buffer_size: 200000
+  batch_size: 128
+  gamma: 0.99
+  tau: 0.02
+  train_freq: 20
+  gradient_steps: 256
+#  learning_starts: 500
+  policy_kwargs: "dict(log_std_init=-3, net_arch=[256, 256], n_critics=2, use_expln=True)"
+
+donkey-circuit-launch-track-v0:
+  <<: *defaults
