@@ -35,20 +35,21 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv, sync_envs_norm
 
 
 class EvalInfoCallback(EvalCallback):
-
     def __init__(
             self,
             eval_env: VecEnv,
+            callback_on_new_best: Optional[BaseCallback] = None,
+            best_model_save_path: Optional[str] = None,
             n_eval_episodes: int = 5,
             eval_freq: int = 10000,
             deterministic: bool = True,
             verbose: int = 0,
-            best_model_save_path: Optional[str] = None,
             log_path: Optional[str] = None,
     ):
 
         super().__init__(
             eval_env=eval_env,
+            callback_on_new_best=callback_on_new_best,
             n_eval_episodes=n_eval_episodes,
             eval_freq=eval_freq,
             deterministic=deterministic,
@@ -57,7 +58,21 @@ class EvalInfoCallback(EvalCallback):
             log_path=log_path,
         )
 
-        self._success_rate_buffer
+        self.best_success_rate = -np.inf
+        self.best_success_rate_mean_len = np.inf
+
+        # self.evaluations_success_rate = []
+        # self.evaluations_mean_success_len = []
+        # self.evaluations_collision_rate = []
+        # self.evaluations_mean_collision_len = []
+        # self.evaluations_timeout_rate = []
+        # self.evaluations_mean_timeout_len = []
+
+        # 类中调用，eval完后清零
+        self._is_success_buffer = []
+        self._is_timeout_buffer = []
+        self._is_collision_buffer = []
+        self._episode_lengths_buffer = []
 
     def _log_info_callback(self, locals_: Dict[str, Any], globals_: Dict[str, Any]) -> None:
         """
@@ -69,11 +84,23 @@ class EvalInfoCallback(EvalCallback):
         :param globals_:
         """
         info = locals_["info"]
+        if info .__contains__("done"):
+            if info.get("done") == "ReachGoal":
+                self._is_success_buffer.append(True)
+            else:
+                self._is_success_buffer.append(False)
 
-        if locals_["done"]:
-            maybe_is_success = info.get("is_success")
-            if maybe_is_success is not None:
-                self._is_success_buffer.append(maybe_is_success)
+            if info.get("done") == "Collision":
+                self._is_collision_buffer.append(True)
+            else:
+                self._is_collision_buffer.append(False)
+
+            if info.get("done") == "Timeout":
+                self._is_timeout_buffer.append(True)
+            else:
+                self._is_timeout_buffer.append(False)
+
+
 
     def _on_step(self) -> bool:
 
@@ -103,8 +130,15 @@ class EvalInfoCallback(EvalCallback):
                 deterministic=self.deterministic,
                 return_episode_rewards=True,
                 warn=self.warn,
-                callback=self._log_success_callback,
+                callback=self._log_info_callback,
             )
+
+            success_rate = 0.0
+            mean_success_len = 0
+            collision_rate = 0.0
+            mean_collision_len = 0
+            timeout_rate = 0.0
+            mean_timeout_len = 0
 
             if self.log_path is not None:
                 self.evaluations_timesteps.append(self.num_timesteps)
@@ -113,9 +147,39 @@ class EvalInfoCallback(EvalCallback):
 
                 kwargs = {}
                 # Save success log if present
-                if len(self._is_success_buffer) > 0:
-                    self.evaluations_successes.append(self._is_success_buffer)
-                    kwargs = dict(successes=self.evaluations_successes)
+                if np.any(self._is_success_buffer):
+                    # self.evaluations_successes.append(self._is_success_buffer)
+                    # 计算成功率
+                    success_rate = np.sum(self._is_success_buffer) / len(episode_lengths)
+                    # 计算成功的episode所对应的长度，并取mean
+                    success_len = np.array(episode_lengths)[np.array(self._is_success_buffer)]
+                    mean_success_len = np.mean(success_len)
+
+                kwargs['success_rate'] = success_rate
+                kwargs['mean_success_len'] = mean_success_len
+
+                # Save collision log if present
+                if np.any(self._is_collision_buffer):
+                    # 计算成功率
+                    collision_rate = np.sum(self._is_collision_buffer) / len(episode_lengths)
+
+                    collision_len = np.array(episode_lengths)[np.array(self._is_collision_buffer)]
+                    mean_collision_len = np.mean(collision_len)
+
+                kwargs['collision_rate'] = collision_rate
+                kwargs['mean_collision_len'] = mean_collision_len
+
+                # Save timeout log if present
+                if np.any(self._is_timeout_buffer):
+                    # 计算成功率
+                    # timeout_rate = np.array(np.sum(self._is_timeout_buffer) / len(episode_lengths))
+                    timeout_rate = np.sum(self._is_timeout_buffer) / len(episode_lengths)
+
+                    timeout_len = np.array(episode_lengths)[np.array(self._is_timeout_buffer)]
+                    mean_timeout_len = np.mean(timeout_len)
+
+                kwargs['timeout_rate'] = timeout_rate
+                kwargs['mean_timeout_len'] = mean_timeout_len
 
                 np.savez(
                     self.log_path,
@@ -126,55 +190,69 @@ class EvalInfoCallback(EvalCallback):
                 )
 
             mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
+
             mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
+            # 记录最后一个貌似是给optuna用的
             self.last_mean_reward = mean_reward
+            self.last_success_rate = success_rate
+            # self.last_success_rate_mean_len = mean_success_len
 
             if self.verbose >= 1:
                 print(
                     f"Eval num_timesteps={self.num_timesteps}, " f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
                 print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
+            print(f"========= Success rate: {100 * success_rate:.2f}% =========")
+            print(f"========= Collision rate: {100 * collision_rate:.2f}% =========")
+            print(f"========= Timeout rate: {100 * timeout_rate:.2f}% =========")
             # Add to current Logger
             self.logger.record("eval/mean_reward", float(mean_reward))
             self.logger.record("eval/mean_ep_length", mean_ep_length)
-
-            if len(self._is_success_buffer) > 0:
-                success_rate = np.mean(self._is_success_buffer)
-                if self.verbose >= 1:
-                    print(f"Success rate: {100 * success_rate:.2f}%")
-                self.logger.record("eval/success_rate", success_rate)
+            # self.logger.record("eval/success_rate", success_rate)
+            # self.logger.record("eval/collision_rate", collision_rate)
+            # self.logger.record("eval/timeout_rate", timeout_rate)
+            self.logger.record("eval/success_rate", float(success_rate))
+            self.logger.record("eval/collision_rate", float(collision_rate))
+            self.logger.record("eval/timeout_rate", float(timeout_rate))
 
             # Dump log so the evaluation results are printed with the correct timestep
             self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
+            # dump是打印出来的数据
             self.logger.dump(self.num_timesteps)
 
-            if mean_reward > self.best_mean_reward:
+            if success_rate != 0 > self.best_success_rate:
+                self.best_success_rate = success_rate
                 if self.verbose >= 1:
-                    print("New best mean reward!")
+                    print("========= New best success rate! =========")
                 if self.best_model_save_path is not None:
                     self.model.save(os.path.join(self.best_model_save_path, "best_model"))
-                self.best_mean_reward = mean_reward
-                # Trigger callback on new best model, if needed
+                if self.callback_on_new_best is not None:
+                    continue_training = self.callback_on_new_best.on_step()
+            elif success_rate == self.best_success_rate:
+                # 追求速度
+                # if mean_success_len < self.best_success_rate_mean_len:
+                #     self.best_success_rate_mean_len = mean_success_len
+                #     if self.verbose >= 1:
+                #         print("New best success rate with shorter length!")
+
+                # 追求安全性，reward中有一个关于dminst的项
+                if mean_reward > self.best_mean_reward:
+                    self.best_mean_reward = mean_reward
+                    if self.verbose >= 1:
+                        print("New best success rate with best mean reward!")
+                if self.best_model_save_path is not None:
+                    self.model.save(os.path.join(self.best_model_save_path, "best_model"))
                 if self.callback_on_new_best is not None:
                     continue_training = self.callback_on_new_best.on_step()
 
+            # 在每一次eval时使用的，记得清零
+            self._is_success_buffer = []
+            self._is_collision_buffer = []
+            self._is_timeout_buffer = []
             # Trigger callback after every evaluation, if needed
             if self.callback is not None:
                 continue_training = continue_training and self._on_event()
 
         return continue_training
-
-    # def _on_step(self) -> bool:
-    #     if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
-    #         super()._on_step()
-    #         self.eval_idx += 1
-    #         # report best or report current ?
-    #         # report num_timesteps or elasped time ?
-    #         self.trial.report(self.last_mean_reward, self.eval_idx)
-    #         # Prune trial if need
-    #         if self.trial.should_prune():
-    #             self.is_pruned = True
-    #             return False
-    #     return True
 
 
 class TrialEvalCallback(EvalCallback):

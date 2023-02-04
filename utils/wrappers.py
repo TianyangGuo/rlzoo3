@@ -8,6 +8,7 @@ import torch as th
 from sb3_contrib.common.wrappers import TimeFeatureWrapper  # noqa: F401 (backward compatibility)
 from scipy.signal import iirfilter, sosfilt, zpk2sos
 from stable_baselines3 import SAC
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvObs, VecEnvStepReturn, VecEnvWrapper
 
 
@@ -270,7 +271,7 @@ class HistoryWrapper(gym.Wrapper):
         self.obs_history[...] = 0
         self.action_history[...] = 0
         obs = self.env.reset()
-        self.obs_history[..., -obs.shape[-1] :] = obs
+        self.obs_history[..., -obs.shape[-1]:] = obs
         return self._create_obs_from_history()
 
     def step(self, action):
@@ -278,10 +279,10 @@ class HistoryWrapper(gym.Wrapper):
         last_ax_size = obs.shape[-1]
 
         self.obs_history = np.roll(self.obs_history, shift=-last_ax_size, axis=-1)
-        self.obs_history[..., -obs.shape[-1] :] = obs
+        self.obs_history[..., -obs.shape[-1]:] = obs
 
         self.action_history = np.roll(self.action_history, shift=-action.shape[-1], axis=-1)
-        self.action_history[..., -action.shape[-1] :] = action
+        self.action_history[..., -action.shape[-1]:] = action
         return self._create_obs_from_history(), reward, done, info
 
 
@@ -330,7 +331,7 @@ class HistoryWrapperObsDict(gym.Wrapper):
         self.action_history[...] = 0
         obs_dict = self.env.reset()
         obs = obs_dict["observation"]
-        self.obs_history[..., -obs.shape[-1] :] = obs
+        self.obs_history[..., -obs.shape[-1]:] = obs
 
         obs_dict["observation"] = self._create_obs_from_history()
 
@@ -342,10 +343,10 @@ class HistoryWrapperObsDict(gym.Wrapper):
         last_ax_size = obs.shape[-1]
 
         self.obs_history = np.roll(self.obs_history, shift=-last_ax_size, axis=-1)
-        self.obs_history[..., -obs.shape[-1] :] = obs
+        self.obs_history[..., -obs.shape[-1]:] = obs
 
         self.action_history = np.roll(self.action_history, shift=-action.shape[-1], axis=-1)
-        self.action_history[..., -action.shape[-1] :] = action
+        self.action_history[..., -action.shape[-1]:] = action
 
         obs_dict["observation"] = self._create_obs_from_history()
 
@@ -361,13 +362,13 @@ class ResidualExpertWrapper(gym.Wrapper):
     """
 
     def __init__(
-        self,
-        env: gym.Env,
-        model_path: Optional[str] = os.environ.get("MODEL_PATH"),
-        add_expert_to_obs: bool = True,
-        residual_scale: float = 0.2,
-        expert_scale: float = 1.0,
-        d3rlpy_model: bool = False,
+            self,
+            env: gym.Env,
+            model_path: Optional[str] = os.environ.get("MODEL_PATH"),
+            add_expert_to_obs: bool = True,
+            residual_scale: float = 0.2,
+            expert_scale: float = 1.0,
+            d3rlpy_model: bool = False,
     ):
         assert isinstance(env.observation_space, gym.spaces.Box)
         assert model_path is not None
@@ -442,7 +443,7 @@ class ContinuityCostWrapper(gym.Wrapper):
         # Continuity cost
         if self.last_action is not None:
             max_delta = 2.0  # for the action space: high - low = 1 - (-1) = 2
-            continuity_cost = np.mean((action - self.last_action) ** 2 / max_delta**2)
+            continuity_cost = np.mean((action - self.last_action) ** 2 / max_delta ** 2)
             continuity_cost = self.weight_continuity * continuity_cost
         else:
             continuity_cost = 0.0

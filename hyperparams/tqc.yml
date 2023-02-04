@@ -15,13 +15,13 @@ MultiSim-v0: &defaults
   policy: 'MlpPolicy'
   learning_rate: !!float 7.3e-4
   buffer_size: 200000
-  batch_size: 128
+  batch_size: 256
   ent_coef: 'auto'
   gamma: 0.99
   tau: 0.02
-  train_freq: 20
+  train_freq: 200
   gradient_steps: 256
-#  learning_starts: 500
+  learning_starts: 500
   use_sde_at_warmup: True
   use_sde: True
   sde_sample_freq: 16
